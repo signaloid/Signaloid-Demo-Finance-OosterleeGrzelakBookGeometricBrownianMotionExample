@@ -1,0 +1,30 @@
+MinimumCore:
+    Microarchitecture: Athens
+    MemorySize: 256000
+    Precision: 32 
+
+TraceVariables:
+    - File: "main.c"
+      LineNumber: 202
+      Expression: "outputVariables[0:3]"
+
+BenchmarkingVariables:
+    - VariableName: outputVariables[0]
+      VariableDescription: Stock Price At Maturity
+      OutputObject: Distribution
+      CommandLineArguments: -S 0
+    - VariableName: outputVariables[1]
+      VariableDescription: Call Option
+      OutputObject: Distribution
+      CommandLineArguments: -S 1
+    - VariableName: outputVariables[2]
+      VariableDescription: Put Option
+      OutputObject: Distribution
+      CommandLineArguments: -S 2
+    - VariableName: outputVariables[3]
+      VariableDescription: Value at Risk
+      OutputObject: Scalar
+      CommandLineArguments: -S 3
+
+BenchmarkingAllOutputs:
+    - CommandLineArguments: -S 5
