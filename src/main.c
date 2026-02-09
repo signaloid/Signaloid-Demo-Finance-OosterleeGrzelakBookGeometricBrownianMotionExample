@@ -33,7 +33,7 @@
  *	@brief	Calculates the output of the program, based on the command-line arguments. Writes
  *		to `outputVariables`, depending on the selected output and also writes the results
  *		to `monteCarloOutputSamples`, which needs to be allocated both in MonteCarlo Mode
- *		and in Laplace execution mode.
+ *		and in UxHw execution mode.
  *
  *	@param	arguments		: A pointer to the command-line arguments.
  *	@param	outputVariables		: A pointer to the array where the output values are written.
@@ -219,7 +219,7 @@ main(int argc, char *  argv[])
 	}
 
 	/*
-	 *	MonteCarlo output samples are used even in the Laplace use case to store
+	 *	MonteCarlo output samples are used even in the UxHw use case to store
 	 *	the result of intermediate steps.
 	 */
 	monteCarloOutputSamples =
@@ -245,7 +245,7 @@ main(int argc, char *  argv[])
 	output = calculateOutput(&arguments, outputVariables, monteCarloOutputSamples);
 
 	/*
-	 *	If not doing Laplace version, then approximate the cost of the third phase of
+	 *	If not doing UxHw version, then approximate the cost of the third phase of
 	 *	Monte Carlo (post-processing), by calculating the mean and variance.
 	 */
 	if (arguments.common.isMonteCarloMode)

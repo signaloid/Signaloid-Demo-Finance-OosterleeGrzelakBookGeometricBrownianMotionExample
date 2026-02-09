@@ -89,7 +89,7 @@ geometricBrownianMotion(
 	}
 
 	/*
-	 *	Return the last sample. For Laplace execution
+	 *	Return the last sample. For UxHw execution
 	 *	where `numberOfMonteCarloIterations == 1`, returns the single
 	 *	distributional value.
 	 */
