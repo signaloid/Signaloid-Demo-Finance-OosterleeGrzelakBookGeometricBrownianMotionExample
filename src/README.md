@@ -3,8 +3,18 @@
 ## main.c
 Implementation of the main functionality of the application.
 
-## geometric-brownian-motion.*
-Implementation of the Geometric Motion algorithm as well as put and call option calculation.
+## kernel.c/h
+Implementation of the compute kernel: drives the geometric Brownian motion path
+calculation and the derived put/call option, Value-at-Risk, and simulated-returns
+outputs, dispatching to either the UxHw or the Monte Carlo implementation below.
+
+## geometric-brownian-motion-uxhw.c/h
+Implementation of the geometric Brownian motion algorithm and option calculations
+using the Signaloid UxHw API (or, for native builds, the UxHw compatibility shim).
+
+## geometric-brownian-motion-monte-carlo.c/h
+Monte Carlo implementation of the same geometric Brownian motion algorithm and
+option calculations, used for native benchmarking runs (`-M`).
 
 ## utilities.c/h
 These contain utility methods for parsing, setting, and reporting
@@ -28,7 +38,7 @@ random number generators to achieve that. This allows building our C/C++ demo ap
 natively (i.e., on conventional architectures) and running native Monte Carlo evaluations
 of our C/C++ demo applications without modifying the source code.
 These source files are symlinks to the original files and are contained in the repository
-[Signaloid-Demo-UxHwCompatibilityForNativeExecution](https://github.com/signaloid/Signaloid-Demo-UxHwCompatibilityForNativeExecution)
+[UxHwCompatibility](https://github.com/signaloid/UxHwCompatibility)
 which is included as a submodule in `submodules/compat`.
 
 ## config.mk
@@ -37,12 +47,11 @@ building the C/C++ demo application.
 
 # To Build Natively on Non-Signaloid Platforms
 
-## On MacOS (with MacPorts)
+From the repository root, build with:
 ```
-gcc -O3 -I. -I/opt/local/include main.c utilities.c common.c uxhw.c geometric-brownian-motion.c -L/opt/local/lib -lgsl -lgslcblas
+make local-build
 ```
 
-## On Linux
-```
-gcc -O3 -I. -I/opt/local/include main.c utilities.c common.c uxhw.c geometric-brownian-motion.c -L/opt/local/lib -lgsl -lgslcblas -lm
-```
+This produces the native Monte Carlo executable `demo-native-mc` at the repository
+root. See the `Prerequisites` section of the top-level `README.md` for how to install
+the build dependencies on macOS and Linux.

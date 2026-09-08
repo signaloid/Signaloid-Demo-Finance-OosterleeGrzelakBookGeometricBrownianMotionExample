@@ -1,11 +1,13 @@
 MinimumCore:
     Microarchitecture: Athens
     MemorySize: 256000
-    Precision: 32 
+    Precision: 32
 
 TraceVariables:
     - File: "main.c"
-      LineNumber: 202
+
+      LineNumber: 47
+
       Expression: "outputVariables[0:3]"
 
 BenchmarkingVariables:
