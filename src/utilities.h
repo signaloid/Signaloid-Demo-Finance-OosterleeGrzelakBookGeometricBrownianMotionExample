@@ -23,67 +23,77 @@
 #pragma once
 
 #include "common.h"
-#define SignaloidParticleModifierTemp	"P"
 
 typedef enum
 {
-	kOutputVariableIndexStockPriceAtMaturity		= 0,
-	kOutputVariableIndexCallOptionPrice			= 1,
-	kOutputVariableIndexPutOptionPrice			= 2,
-	kOutputVariableIndexValueAtRisk				= 3,
-	kOutputVariableIndexSimulatedReturns			= 4,
+	kOutputVariableIndexStockPriceAtMaturity    = 0,
+	kOutputVariableIndexCallOptionPrice         = 1,
+	kOutputVariableIndexPutOptionPrice          = 2,
+	kOutputVariableIndexValueAtRisk             = 3,
+	kOutputVariableIndexSimulatedReturns        = 4,
 	kOutputVariableIndexMax,
 } OutputVariableIndex;
 
 typedef enum
 {
-	kGeometricBrownianMotionConfigFrequencyIndexDays 	= 0,
-	kGeometricBrownianMotionConfigFrequencyIndexMonths	= 1,
-	kGeometricBrownianMotionConfigFrequencyIndexYears	= 2,
+	kGeometricBrownianMotionConfigFrequencyIndexDays    = 0,
+	kGeometricBrownianMotionConfigFrequencyIndexMonths  = 1,
+	kGeometricBrownianMotionConfigFrequencyIndexYears   = 2,
 	kGeometricBrownianMotionConfigFrequencyIndexMax,
 } kGeometricBrownianMotionConfigFrequencyIndex;
 
 
 typedef enum
 {
-	kGeometricBrownianMotionConfigFrequencyDays 	= 252,
-	kGeometricBrownianMotionConfigFrequencyMonths	= 12,
-	kGeometricBrownianMotionConfigFrequencyYears	= 1,
+	kGeometricBrownianMotionConfigFrequencyDays     = 252,
+	kGeometricBrownianMotionConfigFrequencyMonths   = 12,
+	kGeometricBrownianMotionConfigFrequencyYears    = 1,
 } kGeometricBrownianMotionConfigFrequency;
 
-typedef enum
-{
-	kGeometricBrownianMotionConfigDefaultNumberOfPaths	= 25,
-} GeometricBrownianMotionConfigDefault;
+#define kGeometricBrownianMotionConfigDefaultRiskFreeRate           (0.05)
+#define kGeometricBrownianMotionConfigDefaultInitialPortfolioValue  (100.0)
+#define kGeometricBrownianMotionConfigDefaultPeriodicVolatility     (0.4)
+#define kGeometricBrownianMotionConfigDefaultStrikePrice            (90.0)
+#define kGeometricBrownianMotionConfigDefaultQuantileProbability    (0.05)
+#define kGeometricBrownianMotionConfigDefaultRiskFreeInterestRate   (0.05)
+#define kGeometricBrownianMotionConfigDefaultMaturityTime           (1.0)
+#define kGeometricBrownianMotionConfigDefaultStartDate              (0.0)
 
-#define kGeometricBrownianMotionConfigDefaultPeriodicMeanReturn		(0.05)
-#define kGeometricBrownianMotionConfigDefaultInitialPortfolioValue	(100.0)
-#define kGeometricBrownianMotionConfigDefaultPeriodicVolatility		(0.4)
-#define kGeometricBrownianMotionConfigDefaultStrikePrice		(90.0)
-#define kGeometricBrownianMotionConfigDefaultQuantileProbability	(0.05)
-#define kGeometricBrownianMotionConfigDefaultRiskFreeInterestRate	(0.05)
-#define kGeometricBrownianMotionConfigDefaultMaturityTime		(1.0)
-#define kGeometricBrownianMotionConfigDefaultStartDate			(0.0)
+/*
+ *	Maturity time used by the no-OS build, where command-line arguments are not
+ *	available. Expressed in trading days and converted to the years unit that
+ *	`CommandLineArguments.maturityTime` carries, using the same 252-trading-day
+ *	year as `kGeometricBrownianMotionConfigFrequencyDays`.
+ */
+#define kGeometricBrownianMotionConfigNoOSMaturityTimeInDays (2.0)
+#define kGeometricBrownianMotionConfigNoOSMaturityTime          \
+		(kGeometricBrownianMotionConfigNoOSMaturityTimeInDays / \
+		 (double) kGeometricBrownianMotionConfigFrequencyDays)
 
 typedef struct CommandLineArguments
 {
-	CommonCommandLineArguments	common;
-	double				periodicMeanReturn;
-	unsigned int			frequencyIndex;
-	double				initialPortfolioValue;
-	double				periodicVolatility;
-	double				strikePrice;
-	double				quantileProbability;
-	double				maturityTime;
+	CommonCommandLineArguments  common;
+	double                      riskFreeRate;
+	unsigned int                frequencyIndex;
+	double                      initialPortfolioValue;
+	double                      periodicVolatility;
+	double                      strikePrice;
+	double                      quantileProbability;
+	double                      maturityTime;
 } CommandLineArguments;
 
 /**
  *	@brief	Print out command-line usage.
  */
-void	printUsage(void);
+void
+printUsage(void);
 
 /**
  *	@brief	Get command-line arguments.
+ *
+ *		In the no-OS build there is no command line: `argc` and `argv` are
+ *		ignored and the hard-coded configuration set by
+ *		`setNoOSCommandLineArguments()` is used instead.
  *
  *	@param	argc		: argument count from `main()`.
  *	@param	argv		: argument vector from `main()`.
@@ -91,50 +101,31 @@ void	printUsage(void);
  *	@return			: `kCommonConstantReturnTypeSuccess` if successful,
  *					else `kCommonConstantReturnTypeError`.
  */
-CommonConstantReturnType getCommandLineArguments(int argc, char *  argv[], CommandLineArguments *  arguments);
+CommonConstantReturnType
+getCommandLineArguments(int argc, char *  argv[], CommandLineArguments *  arguments);
+
+#ifdef NO_OS_AVAILABLE
 
 /**
- * 	@brief  Populates a JSONVariable struct
+ *	@brief	Set the hard-coded command-line arguments used by the no-OS build.
  *
- *	@param  jsonVariable				: Pointer to the `JSONVariable` struct to modify.
- *	@param  outputVariableValues			: The array of values for the output variable from which the JSON struct will take values.
- *	@param  outputVariableDescription		: The array of descriptions of output variables from which the JSON struct will take descriptions.
- *	@param  outputSelect				: An index to the `outputDistributions`. Chooses which value will be selected.
- *	@param  numberOfOutputVariableValues		: The number of values in `outputVariableValues`.
+ *		This is the single place to change the configuration that no-OS
+ *		runs use, since those runs cannot be given command-line arguments.
+ *		Fields not set here keep the values from
+ *		`setDefaultCommandLineArguments()`.
+ *
+ *	@param	arguments	: command-line arguments pointer.
+ *	@return			: `kCommonConstantReturnTypeSuccess` if successful,
+ *					else `kCommonConstantReturnTypeError`.
  */
-void	populateJSONVariableStruct(
-		JSONVariable *		jsonVariable,
-		double *		outputVariableValues,
-		const char *		outputVariableDescription,
-		OutputVariableIndex	outputSelect,
-		size_t			numberOfOutputVariableValues);
+CommonConstantReturnType
+setNoOSCommandLineArguments(CommandLineArguments * arguments);
+#endif
 
 /**
- *	@brief  Prints output distributions in JSON format. Based on command-line arguments will either print
- *		a single value or all values stored in `outputDistributions`.
+ *	@brief	Set the default values for the command-line arguments.
  *
- *	@param  arguments			: The command-line arguments, specifying which outputs will be printed.
- *	@param  monteCarloOutputSamples		: The array of data samples of Monte Carlo.
- *	@param  outputDistributions 		: The array that stores the distributions to be printed.
- *	@param  outputVariableDescriptions	: An array of strings containing the descriptions of the variables to be printed.
+ *	@param	arguments	: command-line arguments pointer.
  */
-void	printJSONFormattedOutput(
-		CommandLineArguments *	arguments,
-		double *		monteCarloOutputSamples,
-		double *		outputDistributions,
-		const char **		outputVariableDescriptions);
-
-
-/**
- *	@brief	Print Ux-valued data to `stdout` in JSON format.
- *
- *	@param	jsonVariables	array of JSONVariable items
- *	@param	count		number of JSONVariable items
- *	@param	description	JSON description
- */
-void
-printJSONVariablesTemp(
-	JSONVariable *	jsonVariables,
-	size_t		count,
-	const char *	description);
-
+CommonConstantReturnType
+setDefaultCommandLineArguments(CommandLineArguments * arguments);

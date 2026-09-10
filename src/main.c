@@ -20,198 +20,52 @@
  *	SOFTWARE.
  */
 
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <stdbool.h>
+#include <uxhw.h>
 #include "utilities.h"
-#include "geometric-brownian-motion.h"
+#include "kernel.h"
+#include "common.h"
 
+#ifdef NO_OS_AVAILABLE
 
-/**
- *	@brief	Calculates the output of the program, based on the command-line arguments. Writes
- *		to `outputVariables`, depending on the selected output and also writes the results
- *		to `monteCarloOutputSamples`, which needs to be allocated both in MonteCarlo Mode
- *		and in UxHw execution mode.
- *
- *	@param	arguments		: A pointer to the command-line arguments.
- *	@param	outputVariables		: A pointer to the array where the output values are written.
- *	@param	monteCarloOutputSamples	: A pointer to the array where the Monte Carlo samples are written.
- *	@return	double			: Returns the output value when a single output has been selected. If
- *						all outputs are selected, returns the output for `kOutputVariableIndexPutOptionPrice`.
- */
-static double
-calculateOutput(CommandLineArguments *  arguments, double *  outputVariables, double *  monteCarloOutputSamples)
-{
-	double		result;
-	double		stockPriceAtMaturity;
-	double		zeroCouponValue;
-	double		valueAtRisk;
-	double 		simulatedReturns;
-	bool		calculateAllOutputs;
-	size_t 		numberOfSteps;
-
-	calculateAllOutputs 	= (arguments->common.outputSelect == kOutputVariableIndexMax);
-	zeroCouponValue 	= exp(
-					-arguments->periodicMeanReturn *
-						(arguments->maturityTime -
-						kGeometricBrownianMotionConfigDefaultStartDate)
-					);
-
-	/*
-	 *	Compute number of steps in simulation based on the frequency.
-	 */
-	if (arguments->frequencyIndex == kGeometricBrownianMotionConfigFrequencyIndexDays)
-	{
-		numberOfSteps = (size_t)arguments->maturityTime * kGeometricBrownianMotionConfigFrequencyDays;
-	}
-	else if (arguments->frequencyIndex == kGeometricBrownianMotionConfigFrequencyIndexMonths)
-	{
-		numberOfSteps = (size_t)arguments->maturityTime * kGeometricBrownianMotionConfigFrequencyMonths;
-	}
-	else
-	{
-		numberOfSteps = (size_t)arguments->maturityTime * kGeometricBrownianMotionConfigFrequencyYears;
-	}
-
-	/*
-	 *	First, calculate the distribution of prices at maturity.
-	 */
-	stockPriceAtMaturity = geometricBrownianMotion(
-			arguments->common.numberOfMonteCarloIterations,
-			numberOfSteps,
-			arguments->periodicVolatility,
-			arguments->maturityTime,
-			arguments->periodicMeanReturn,
-			arguments->initialPortfolioValue,
-			monteCarloOutputSamples);
-
-
-	if (calculateAllOutputs || (arguments->common.outputSelect == kOutputVariableIndexStockPriceAtMaturity))
-	{
-		result = outputVariables[kOutputVariableIndexStockPriceAtMaturity] = stockPriceAtMaturity;
-	}
-
-	/*
-	 *	Compute call option payoff.
-	 */
-	if (calculateAllOutputs || (arguments->common.outputSelect == kOutputVariableIndexCallOptionPrice))
-	{
-		double	payoff;
-
-		/*
-		 *	Next, calculate the payoff based on price at maturity and strike price.
-		 *	We will be replacing the price values in `monteCarloOutputSamples` with the
-		 *	payoff values.
-		 */
-		for (size_t i = 0; i < arguments->common.numberOfMonteCarloIterations; i++)
-		{
-			payoff = callOptionPayoff(monteCarloOutputSamples[i], arguments->strikePrice);
-			/*
-			 *	Finally, multiply mean payoff by present value of zero-coupon bond
-			 *	(see An Introduction to Quantitative Finance, Blyth,
-			 *	page 4, first paragraph just below Figure 1.1):
-			 */
-			payoff = payoff * zeroCouponValue;
-			if (arguments->common.outputSelect == kOutputVariableIndexCallOptionPrice)
-			{
-				monteCarloOutputSamples[i] = payoff;
-			}
-		}
-
-		result = outputVariables[kOutputVariableIndexCallOptionPrice] = payoff;
-
-	}
-
-	/*
-	 *	Compute put option payoff.
-	 */
-	if (calculateAllOutputs || (arguments->common.outputSelect == kOutputVariableIndexPutOptionPrice))
-	{
-		double	payoff;
-
-		/*
-		*	Next, calculate the payoff based on price at maturity and strike price.
-		*	We will be replacing the price values in `monteCarloOutputSamples` with the
-		*	payoff values.
-		*/
-		for (size_t i = 0; i < arguments->common.numberOfMonteCarloIterations; i++)
-		{
-			payoff = putOptionPayoff(monteCarloOutputSamples[i], arguments->strikePrice);
-			payoff = payoff * zeroCouponValue;
-			if (arguments->common.outputSelect == kOutputVariableIndexPutOptionPrice)
-			{
-				monteCarloOutputSamples[i] = payoff;
-			}
-		}
-
-		result = outputVariables[kOutputVariableIndexPutOptionPrice] = payoff;
-	}
-
-	/*
-	 *	Compute simulated returns and/or value at risk.
-	 */
-	if (calculateAllOutputs || (arguments->common.outputSelect == kOutputVariableIndexValueAtRisk) || (arguments->common.outputSelect == kOutputVariableIndexSimulatedReturns))
-	{
-		for (size_t i = 0; i < arguments->common.numberOfMonteCarloIterations; i++)
-		{
-			simulatedReturns = computeSimulatedReturns(monteCarloOutputSamples[i], arguments->initialPortfolioValue);
-			monteCarloOutputSamples[i] = simulatedReturns;
-		}
-
-		if (calculateAllOutputs || (arguments->common.outputSelect == kOutputVariableIndexSimulatedReturns))
-		{
-			result = outputVariables[kOutputVariableIndexSimulatedReturns] = simulatedReturns;
-		}
-
-		if (calculateAllOutputs || (arguments->common.outputSelect == kOutputVariableIndexValueAtRisk))
-		{
-			if(arguments->common.isMonteCarloMode)
-			{
-				valueAtRisk = calculatePercentageQuantileOfDoubleSamples(
-							monteCarloOutputSamples,
-							arguments->quantileProbability,
-							arguments->common.numberOfMonteCarloIterations);
-			}
-			else 
-			{
-				valueAtRisk = computeValueAtRisk(simulatedReturns, arguments->quantileProbability);
-			}
-
-			for (size_t i = 0; i < arguments->common.numberOfMonteCarloIterations; i++)
-			{
-				monteCarloOutputSamples[i] = valueAtRisk;
-			}
-
-			result = outputVariables[kOutputVariableIndexValueAtRisk] = valueAtRisk;
-		}
-	}
-	return result;
-}
+void
+returnZeroNoOS(void);
+#endif
 
 int
 main(int argc, char *  argv[])
 {
-	CommandLineArguments	arguments;
-	double			output;
-	double *		monteCarloOutputSamples = NULL;
-	clock_t			start;
-	clock_t			end;
-	double			cpuTimeInSeconds;
-	double			outputVariables[kOutputVariableIndexMax];
-	const char *		outputVariableNames[kOutputVariableIndexMax] =
-				{
-					[kOutputVariableIndexStockPriceAtMaturity]	= "Stock price at maturity",
-					[kOutputVariableIndexCallOptionPrice]		= "Call option payoff",
-					[kOutputVariableIndexPutOptionPrice]		= "Put option payoff",
-					[kOutputVariableIndexValueAtRisk]		= "Value at Risk",
-					[kOutputVariableIndexSimulatedReturns]		= "Simulated Returns",
-				};
-	MeanAndVariance		meanAndVariance;
+	CommandLineArguments        arguments;
+	double                      output;
+	double *                    monteCarloOutputSamples = NULL;
+	clock_t                     start;
+	clock_t                     end;
+	double                      cpuTimeInSeconds = 0.0;
+	double                      outputVariables[kOutputVariableIndexMax];
+	const char *                applicationDescription = "Oosterlee-Grzelak Book Geometric Brownian Motion";
+	const char *                outputVariableNames[kOutputVariableIndexMax] = {
+		[kOutputVariableIndexStockPriceAtMaturity]  = "Stock price at maturity",
+		[kOutputVariableIndexCallOptionPrice]       = "Call option payoff",
+		[kOutputVariableIndexPutOptionPrice]        = "Put option payoff",
+		[kOutputVariableIndexValueAtRisk]           = "Value at Risk",
+		[kOutputVariableIndexSimulatedReturns]      = "Simulated Returns",
+	};
+	kOutputVariableTypeIndex    outputVariableTypes[kOutputVariableIndexMax] = {
+		[kOutputVariableIndexStockPriceAtMaturity]  = kOutputVariableTypeDistribution,
+		[kOutputVariableIndexCallOptionPrice]       = kOutputVariableTypeDistribution,
+		[kOutputVariableIndexPutOptionPrice]        = kOutputVariableTypeDistribution,
+		[kOutputVariableIndexValueAtRisk]           = kOutputVariableTypeScalar,
+		[kOutputVariableIndexSimulatedReturns]      = kOutputVariableTypeDistribution,
+	};
+	MeanAndVariance             meanAndVariance;
 
 	/*
-	 *	Get command-line arguments.
+	 *	Get command-line arguments. In the no-OS build there is no command
+	 *	line, so this instead applies the hard-coded configuration in
+	 *	`setNoOSCommandLineArguments()`.
 	 */
 	if (getCommandLineArguments(argc, argv, &arguments))
 	{
@@ -219,14 +73,15 @@ main(int argc, char *  argv[])
 	}
 
 	/*
-	 *	MonteCarlo output samples are used even in the UxHw use case to store
+	 *	MonteCarlo output samples are used even in the Laplace use case to store
 	 *	the result of intermediate steps.
 	 */
 	monteCarloOutputSamples =
 		(double *) checkedMalloc(
-				arguments.common.numberOfMonteCarloIterations * sizeof(double),
-				__FILE__,
-				__LINE__);
+			arguments.common.numberOfMonteCarloIterations * sizeof(double),
+			__FILE__,
+			__LINE__
+		);
 
 	/*
 	 *	Start timing.
@@ -237,21 +92,30 @@ main(int argc, char *  argv[])
 	}
 
 	/*
-	 *	For this application, the Monte Carlo loop is in the core algorithm
-	 *	called by `calculateOutput()`. We therefore call it just once, but we
-	 *	pass it the `monteCarloOutputSamples` array to fill in with the
-	 *	relevant samples.
+	 *	Dispatch to the mode-specific kernel. The Monte Carlo loop (when
+	 *	applicable) lives inside `calculateOutputMonteCarlo`; UxHw mode runs a single
+	 *	distributional path inside `calculateOutputUxHw`.
 	 */
-	output = calculateOutput(&arguments, outputVariables, monteCarloOutputSamples);
+	bool isSelectedOutputScalar = (arguments.common.outputSelect != kOutputVariableIndexMax) &&
+	                              (outputVariableTypes[arguments.common.outputSelect] == kOutputVariableTypeScalar);
 
-	/*
-	 *	If not doing UxHw version, then approximate the cost of the third phase of
-	 *	Monte Carlo (post-processing), by calculating the mean and variance.
-	 */
 	if (arguments.common.isMonteCarloMode)
 	{
-		meanAndVariance = calculateMeanAndVarianceOfDoubleSamples(monteCarloOutputSamples, arguments.common.numberOfMonteCarloIterations);
-		output = outputVariables[arguments.common.outputSelect] = meanAndVariance.mean;
+		output = calculateOutputMonteCarlo(&arguments, outputVariables, monteCarloOutputSamples);
+
+		/*
+		 *	If not doing UxHw version, then approximate the cost of the third phase of
+		 *	Monte Carlo (post-processing), by calculating the mean and variance.
+		 */
+		if (!isSelectedOutputScalar)
+		{
+			meanAndVariance = calculateMeanAndVarianceOfDoubleSamples(monteCarloOutputSamples, arguments.common.numberOfMonteCarloIterations);
+			output          = outputVariables[arguments.common.outputSelect] = meanAndVariance.mean;
+		}
+	}
+	else
+	{
+		output = calculateOutputUxHw(&arguments, outputVariables, monteCarloOutputSamples);
 	}
 
 	/*
@@ -259,64 +123,65 @@ main(int argc, char *  argv[])
 	 */
 	if (arguments.common.isTimingEnabled)
 	{
-		end = clock();
-		cpuTimeInSeconds = ((double) (end - start)) / CLOCKS_PER_SEC;
+		end                 = clock();
+		cpuTimeInSeconds    = ((double) (end - start)) / CLOCKS_PER_SEC;
 	}
 
-	if (arguments.common.isBenchmarkingMode)
+	CommonCommandLineArguments printArguments = arguments.common;
+
+	if (arguments.common.isMonteCarloMode && isSelectedOutputScalar)
 	{
-		/*
-		 *	In benchmarking mode, we print:
-		 *		(1) single result (for calculating Wasserstein distance to reference)
-		 *		(2) time in microseconds (benchmarking setup expects cpu time in microseconds)
-		 */
-		printf("%lf %" PRIu64 "\n", output, (uint64_t)(cpuTimeInSeconds*1000000));
+		printArguments.isMonteCarloMode             = false;
+		printArguments.numberOfMonteCarloIterations = 1;
+	}
+
+	/*
+	 *	Print json outputs if in JSON output mode.
+	 */
+	if (arguments.common.isOutputJSONMode)
+	{
+		printJSONFormattedOutput(
+			&printArguments,
+			monteCarloOutputSamples,
+			outputVariables,
+			outputVariableNames,
+			kOutputVariableIndexMax,
+			applicationDescription
+		);
 	}
 	else
 	{
-		/*
-		 *	Print the results (either in JSON or standard output format)
-		 */
-		if (!arguments.common.isOutputJSONMode)
-		{
-			if (arguments.common.outputSelect == kOutputVariableIndexMax)
-			{
-				for (size_t i = 0; i < kOutputVariableIndexMax; i++)
-				{
-					printf("%s: %.2lf\n", outputVariableNames[i], outputVariables[i]);
-				}
-			}
-			else
-			{
-					printf("%s: %.2lf\n", outputVariableNames[arguments.common.outputSelect], outputVariables[arguments.common.outputSelect]);
-			}
-		}
-		else
-		{
-			printJSONFormattedOutput(&arguments, monteCarloOutputSamples, outputVariables, outputVariableNames);
-		}
+		printHumanConsumableOutput(
+			&printArguments,
+			kOutputVariableIndexMax,
+			outputVariables,
+			outputVariableNames,
+			outputVariableNames,
+			monteCarloOutputSamples
+		);
+	}
 
-		/*
-		 *	Print timing result.
-		 */
-		if (arguments.common.isTimingEnabled)
-		{
-			printf("\nCPU time used: %lf seconds\n", cpuTimeInSeconds);
-		}
+	/*
+	 *	Print timing result.
+	 */
+	if (arguments.common.isTimingEnabled)
+	{
+		printf("\nCPU time used: %" SignaloidParticleModifier "lf seconds\n", cpuTimeInSeconds);
+	}
 
-		/*
-		 *	Write output data.
-		 */
-		if (arguments.common.isWriteToFileEnabled)
-		{
-			if (writeOutputDoubleDistributionsToCSV(
+	/*
+	 *	Write output data.
+	 */
+	if (arguments.common.isWriteToFileEnabled)
+	{
+		if (writeOutputDoubleDistributionsToCSV(
 				arguments.common.outputFilePath,
 				outputVariables,
 				outputVariableNames,
-				kOutputVariableIndexMax))
-			{
-				return kCommonConstantReturnTypeError;
-			}
+				kOutputVariableIndexMax
+		))
+		{
+			return kCommonConstantReturnTypeError;
 		}
 	}
 
@@ -326,16 +191,22 @@ main(int argc, char *  argv[])
 	 */
 	if (arguments.common.isMonteCarloMode)
 	{
-		if (arguments.common.outputSelect == kOutputVariableIndexValueAtRisk)
-		{
-			saveMonteCarloDoubleDataToDataDotOutFile(monteCarloOutputSamples, (uint64_t)(cpuTimeInSeconds*1000000), 1);
-		}
-		else
-		{
-			saveMonteCarloDoubleDataToDataDotOutFile(monteCarloOutputSamples, (uint64_t)(cpuTimeInSeconds*1000000), arguments.common.numberOfMonteCarloIterations);
-		}
+		size_t samplesToSave = isSelectedOutputScalar
+		                ? 1
+		                : arguments.common.numberOfMonteCarloIterations;
+
+		saveMonteCarloDoubleDataToDataDotOutFile(
+			monteCarloOutputSamples,
+			(uint64_t) (cpuTimeInSeconds * 1000000),
+			samplesToSave
+		);
 	}
 	free(monteCarloOutputSamples);
+#ifdef NO_OS_AVAILABLE
+	returnZeroNoOS();
+#else
 
 	return 0;
+
+#endif
 }
